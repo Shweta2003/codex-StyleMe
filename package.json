@@ -1,0 +1,20 @@
+{
+  "name": "ai-fit-stylist-demo",
+  "version": "0.1.0",
+  "description": "Scratch prototype for an AI fashion assistant with static demo images, a static product catalog, heuristic fit matching, and optional OpenAI Agents SDK integration.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "export-data": "node scripts/export-public-data.js",
+    "smoke": "node scripts/smoke-server.js",
+    "test": "node --test src/recommendationEngine.test.js"
+  },
+  "dependencies": {
+    "@openai/agents": "^0.11.6",
+    "zod": "latest"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

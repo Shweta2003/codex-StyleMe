@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Fit Stylist Demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Commerce AI prototype</p>
+        <h1>FitLens Stylist</h1>
+      </div>
+      <div class="topbar-actions">
+        <label class="search-shell">
+          <span>Search</span>
+          <input id="searchInput" type="search" placeholder="dress, blazer, scarf" />
+        </label>
+        <span id="agentStatus" class="status-pill">Loading</span>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <aside class="panel shopper-panel">
+        <div class="panel-heading">
+          <p class="eyebrow">Demo shopper</p>
+          <h2>Profile</h2>
+        </div>
+        <div id="profileList" class="profile-list"></div>
+
+        <div class="control-stack">
+          <label>
+            Occasion
+            <select id="occasionSelect">
+              <option value="work">Work</option>
+              <option value="weekend">Weekend</option>
+              <option value="date">Date</option>
+              <option value="event">Event</option>
+              <option value="campus">Campus</option>
+              <option value="travel">Travel</option>
+              <option value="school">School</option>
+              <option value="play">Play</option>
+              <option value="family">Family</option>
+            </select>
+          </label>
+
+          <label>
+            Style mood
+            <select id="styleMoodSelect">
+              <option value="classic">Classic</option>
+              <option value="street">Street</option>
+              <option value="work">Workwear</option>
+              <option value="comfort">Comfort</option>
+              <option value="bold">Bold</option>
+            </select>
+          </label>
+
+          <fieldset>
+            <legend>Fit</legend>
+            <div class="segmented">
+              <label><input type="radio" name="fit" value="balanced" checked />Balanced</label>
+              <label><input type="radio" name="fit" value="structured" />Sharp</label>
+              <label><input type="radio" name="fit" value="relaxed" />Relaxed</label>
+            </div>
+          </fieldset>
+
+          <label>
+            Budget <span id="budgetValue">$120</span>
+            <input id="budgetRange" type="range" min="30" max="250" value="120" />
+          </label>
+
+          <label>
+            Style note
+            <textarea id="notesInput" rows="3" placeholder="Prefer sleeves, avoid heavy layers"></textarea>
+          </label>
+        </div>
+      </aside>
+
+      <section class="product-stage">
+        <div class="selected-profile">
+          <img id="selectedProfileImage" alt="" />
+          <div>
+            <p class="eyebrow">Mock image analysis</p>
+            <h2 id="selectedProfileName">Profile</h2>
+            <div id="profileTags" class="tag-row"></div>
+            <p id="fitGoal" class="muted"></p>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div>
+            <p class="eyebrow">Recommended catalog</p>
+            <h2 id="catalogTitle">Matches</h2>
+          </div>
+          <button id="askAgentButton" type="button">Ask stylist agent</button>
+        </div>
+
+        <div id="seedBanner" class="seed-banner is-hidden"></div>
+        <div id="productGrid" class="product-grid"></div>
+      </section>
+
+      <aside class="panel stylist-panel">
+        <div class="panel-heading">
+          <p class="eyebrow">AI stylist</p>
+          <h2>Reasoning</h2>
+        </div>
+        <p id="assistantNote" class="assistant-note"></p>
+        <div>
+          <h3>Fit signals</h3>
+          <ul id="diagnosisList" class="clean-list"></ul>
+        </div>
+        <div>
+          <h3>Outfit sets</h3>
+          <div id="outfitIdeas" class="outfit-list"></div>
+        </div>
+        <div>
+          <h3>Fit cautions</h3>
+          <ul id="avoidList" class="clean-list"></ul>
+        </div>
+      </aside>
+    </main>
+
+    <script src="./demoData.js"></script>
+    <script src="./clientRecommendation.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
