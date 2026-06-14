@@ -10,6 +10,8 @@ const state = {
   apiAvailable: true
 };
 
+const API_BASE_URL = String(window.APP_CONFIG?.API_BASE_URL || "").replace(/\/$/, "");
+
 const els = {
   profileList: document.querySelector("#profileList"),
   selectedProfileImage: document.querySelector("#selectedProfileImage"),
@@ -123,7 +125,7 @@ async function requestRecommendations() {
 
   try {
     const data = state.apiAvailable
-      ? await fetchJson("/api/recommendations", {
+      ? await fetchJson(apiUrl("/api/recommendations"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
@@ -153,7 +155,7 @@ async function requestRecommendations() {
 
 async function loadBootstrap() {
   try {
-    const bootstrap = await fetchJson("/api/bootstrap");
+    const bootstrap = await fetchJson(apiUrl("/api/bootstrap"));
     state.apiAvailable = true;
     return bootstrap;
   } catch {
@@ -280,6 +282,10 @@ async function fetchJson(url, options) {
     throw new Error(`Request failed: ${response.status}`);
   }
   return response.json();
+}
+
+function apiUrl(path) {
+  return `${API_BASE_URL}${path}`;
 }
 
 function updateStatus(text) {

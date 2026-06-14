@@ -48,3 +48,29 @@ The agent is instructed to avoid inventing products, avoid body-shaming language
 npm test
 ```
 
+## Host client and server separately
+
+The frontend can be hosted as a static site, while `server.js` runs as a separate Node backend.
+
+Backend environment:
+
+```env
+OPENAI_API_KEY=sk-your-key-here
+OPENAI_MODEL=gpt-5.5
+PORT=5173
+ALLOWED_ORIGIN=https://your-client-site.netlify.app
+```
+
+Client build environment:
+
+```env
+CLIENT_API_BASE_URL=https://your-backend-host.example.com
+```
+
+Build the static client:
+
+```powershell
+npm run build:client
+```
+
+Deploy the `public` folder to Netlify or Vercel. Deploy the full project to a Node host for the backend.

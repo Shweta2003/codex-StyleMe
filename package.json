@@ -6,12 +6,14 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "build:client": "node scripts/export-public-data.js && node scripts/export-public-config.js",
     "export-data": "node scripts/export-public-data.js",
+    "export-config": "node scripts/export-public-config.js",
     "smoke": "node scripts/smoke-server.js",
     "test": "node --test src/recommendationEngine.test.js"
   },
   "dependencies": {
-    "@openai/agents": "^0.11.6",
+    "@openai/agents": "latest",
     "zod": "latest"
   },
   "engines": {

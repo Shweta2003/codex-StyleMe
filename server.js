@@ -5,7 +5,7 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { demoProfiles } from "./data/demoProfiles.js";
 import { products } from "./data/products.js";
-import { buildOpenAIRecommendations } from "./src/openaiStylistAgent.js";
+import { buildOpenAIRecommendations, getLastOpenAIError } from "./src/openaiStylistAgent.js";
 import { getSimilarProducts, recommendProducts } from "./src/recommendationEngine.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -13,6 +13,9 @@ loadDotEnv(join(__dirname, ".env"));
 
 const PORT = Number(process.env.PORT || 5173);
 const publicDir = join(__dirname, "public");
+const allowedOrigins = parseAllowedOrigins(
+  process.env.ALLOWED_ORIGINS || process.env.ALLOWED_ORIGIN || ""
+);
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -27,6 +30,12 @@ const mimeTypes = {
 
 const server = http.createServer(async (req, res) => {
   try {
+    applyCors(req, res);
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      return res.end();
+    }
+
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     if (req.method === "GET" && url.pathname === "/api/bootstrap") {
@@ -100,6 +109,7 @@ async function handleRecommendations(body) {
     source: "heuristic",
     model: null,
     preferences,
+    aiError: process.env.OPENAI_API_KEY ? getLastOpenAIError() : null,
     assistantNote: buildLocalNote(profile, heuristic),
     styleDiagnosis: [
       heuristic.guidance.bodyType.tips[0],
@@ -188,6 +198,30 @@ async function serveStatic(pathname, res) {
 function sendJson(res, data, status = 200) {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(data));
+}
+
+function applyCors(req, res) {
+  const origin = req.headers.origin;
+  if (!origin) {
+    return;
+  }
+
+  const allowAny = allowedOrigins.includes("*");
+  if (!allowAny && !allowedOrigins.includes(origin)) {
+    return;
+  }
+
+  res.setHeader("Access-Control-Allow-Origin", allowAny ? "*" : origin);
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Vary", "Origin");
+}
+
+function parseAllowedOrigins(value) {
+  return value
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean);
 }
 
 function readJson(req) {

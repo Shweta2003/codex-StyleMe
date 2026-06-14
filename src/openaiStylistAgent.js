@@ -15,6 +15,12 @@ const OUTPUT_CONTRACT = {
   confidence: "demo"
 };
 
+let lastOpenAIError = null;
+
+export function getLastOpenAIError() {
+  return lastOpenAIError;
+}
+
 export async function buildOpenAIRecommendations({
   profile,
   preferences,
@@ -22,7 +28,13 @@ export async function buildOpenAIRecommendations({
   seedProductId,
   heuristic
 }) {
+  lastOpenAIError = null;
+
   if (!process.env.OPENAI_API_KEY) {
+    lastOpenAIError = {
+      code: "missing-api-key",
+      message: "OPENAI_API_KEY was not available to the server process."
+    };
     return null;
   }
 
@@ -35,6 +47,10 @@ export async function buildOpenAIRecommendations({
     ({ Agent, run, tool } = await import("@openai/agents"));
     ({ z } = await import("zod"));
   } catch (error) {
+    lastOpenAIError = {
+      code: "sdk-unavailable",
+      message: error.message
+    };
     console.warn("OpenAI Agents SDK unavailable. Falling back to heuristics.", error.message);
     return null;
   }
@@ -88,8 +104,19 @@ export async function buildOpenAIRecommendations({
 
   try {
     const result = await run(agent, JSON.stringify(prompt));
-    return normalizeAgentOutput(result.finalOutput, heuristic);
+    const normalized = normalizeAgentOutput(result.finalOutput, heuristic);
+    if (!normalized) {
+      lastOpenAIError = {
+        code: "invalid-agent-output",
+        message: "The OpenAI agent did not return valid JSON for the UI contract."
+      };
+    }
+    return normalized;
   } catch (error) {
+    lastOpenAIError = {
+      code: "agent-run-failed",
+      message: error.message
+    };
     console.warn("OpenAI agent failed. Falling back to heuristics.", error.message);
     return null;
   }
@@ -170,4 +197,3 @@ function parseJson(value) {
     }
   }
 }
-
