@@ -10,6 +10,7 @@
   <body>
     <header class="topbar">
       <div>
+        <p class="eyebrow">Commerce AI prototype</p>
         <h1>StyleMe</h1>
       </div>
       <div class="topbar-actions">
@@ -28,6 +29,40 @@
           <h2>Profile</h2>
         </div>
         <div id="profileList" class="profile-list"></div>
+
+        <div class="upload-panel">
+          <div class="panel-heading">
+            <p class="eyebrow">Your photo</p>
+            <h3>Upload</h3>
+          </div>
+          <label class="upload-drop" for="photoInput">
+            <span id="uploadLabel">Choose image</span>
+            <input id="photoInput" type="file" accept="image/png,image/jpeg,image/webp" />
+          </label>
+          <img id="photoPreview" class="upload-preview is-hidden" alt="Uploaded preview" />
+          <div class="upload-grid">
+            <label>
+              Age group
+              <select id="uploadAgeGroupSelect">
+                <option value="adult">Adult</option>
+                <option value="young-adult">Young adult</option>
+                <option value="teen">Teen</option>
+                <option value="mature">Mature</option>
+                <option value="kid">Kid</option>
+              </select>
+            </label>
+            <label>
+              For
+              <select id="uploadGenderSelect">
+                <option value="all">All</option>
+                <option value="women">Women</option>
+                <option value="men">Men</option>
+                <option value="kids">Kids</option>
+              </select>
+            </label>
+          </div>
+          <button id="analyzePhotoButton" type="button" disabled>Analyze photo</button>
+        </div>
 
         <div class="control-stack">
           <label>
@@ -81,7 +116,6 @@
         <div class="selected-profile">
           <img id="selectedProfileImage" alt="" />
           <div>
-            <p class="eyebrow">Mock image analysis</p>
             <h2 id="selectedProfileName">Profile</h2>
             <div id="profileTags" class="tag-row"></div>
             <p id="fitGoal" class="muted"></p>

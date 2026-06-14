@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   applyCors,
   getBootstrapPayload,
+  getImageAnalysisPayload,
   getRecommendationsPayload,
   getSimilarPayload,
   handleOptions,
@@ -47,6 +48,11 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/recommendations") {
       const body = await readJson(req);
       return sendJson(res, await getRecommendationsPayload(body));
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/analyze-image") {
+      const body = await readJson(req);
+      return sendJson(res, await getImageAnalysisPayload(body));
     }
 
     if (req.method === "GET" && url.pathname === "/api/similar") {

@@ -7,7 +7,9 @@ const state = {
   source: "heuristic",
   model: null,
   hasOpenAIKey: false,
-  apiAvailable: true
+  apiAvailable: true,
+  uploadedProfile: null,
+  uploadImageDataUrl: null
 };
 
 const API_BASE_URL = String(window.APP_CONFIG?.API_BASE_URL || "").replace(/\/$/, "");
@@ -32,7 +34,13 @@ const els = {
   outfitIdeas: document.querySelector("#outfitIdeas"),
   avoidList: document.querySelector("#avoidList"),
   searchInput: document.querySelector("#searchInput"),
-  seedBanner: document.querySelector("#seedBanner")
+  seedBanner: document.querySelector("#seedBanner"),
+  photoInput: document.querySelector("#photoInput"),
+  uploadLabel: document.querySelector("#uploadLabel"),
+  photoPreview: document.querySelector("#photoPreview"),
+  uploadAgeGroupSelect: document.querySelector("#uploadAgeGroupSelect"),
+  uploadGenderSelect: document.querySelector("#uploadGenderSelect"),
+  analyzePhotoButton: document.querySelector("#analyzePhotoButton")
 };
 
 init();
@@ -66,11 +74,13 @@ function bindEvents() {
     input.addEventListener("change", () => requestRecommendations());
   });
   els.searchInput.addEventListener("input", () => renderProducts());
+  els.photoInput.addEventListener("change", handlePhotoSelected);
+  els.analyzePhotoButton.addEventListener("click", analyzeUploadedPhoto);
 }
 
 function renderProfiles() {
   els.profileList.innerHTML = "";
-  for (const profile of state.profiles) {
+  for (const profile of visibleProfiles()) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `profile-card ${profile.id === state.selectedProfileId ? "is-active" : ""}`;
@@ -98,7 +108,7 @@ function renderSelectedProfile() {
   const profile = selectedProfile();
   els.selectedProfileImage.src = profile.image;
   els.selectedProfileImage.alt = profile.name;
-  els.selectedProfileName.textContent = `${profile.name}, ${profile.age}`;
+  els.selectedProfileName.textContent = profile.age ? `${profile.name}, ${profile.age}` : profile.name;
   els.fitGoal.textContent = profile.mockAnalysis.fitGoal;
   els.profileTags.innerHTML = [
     profile.genderPresentation,
@@ -120,7 +130,8 @@ async function requestRecommendations() {
   const payload = {
     profileId: state.selectedProfileId,
     seedProductId: state.seedProductId,
-    preferences: collectPreferences()
+    preferences: collectPreferences(),
+    customProfile: state.selectedProfileId === "uploaded" ? stripProfileImage(state.uploadedProfile) : null
   };
 
   try {
@@ -131,7 +142,7 @@ async function requestRecommendations() {
           body: JSON.stringify(payload)
         })
       : window.CLIENT_RECOMMENDER.recommend({
-          profiles: state.profiles,
+          profiles: visibleProfiles(),
           products: state.products,
           profileId: payload.profileId,
           preferences: payload.preferences,
@@ -150,6 +161,80 @@ async function requestRecommendations() {
   } finally {
     els.askAgentButton.disabled = false;
     els.askAgentButton.textContent = "Ask stylist agent";
+  }
+}
+
+async function handlePhotoSelected(event) {
+  const file = event.target.files?.[0];
+  if (!file) {
+    return;
+  }
+
+  try {
+    updateStatus("Preparing photo");
+    const dataUrl = await compressImageFile(file);
+    state.uploadImageDataUrl = dataUrl;
+    els.photoPreview.src = dataUrl;
+    els.photoPreview.classList.remove("is-hidden");
+    els.uploadLabel.textContent = file.name;
+    els.analyzePhotoButton.disabled = false;
+    updateStatus(state.apiAvailable ? "Photo ready" : "Static demo");
+  } catch (error) {
+    console.error(error);
+    updateStatus("Upload failed");
+    els.uploadLabel.textContent = "Choose image";
+    els.analyzePhotoButton.disabled = true;
+  }
+}
+
+async function analyzeUploadedPhoto() {
+  if (!state.uploadImageDataUrl) {
+    return;
+  }
+
+  els.analyzePhotoButton.disabled = true;
+  els.analyzePhotoButton.textContent = "Analyzing...";
+  updateStatus("Analyzing photo");
+
+  const preferences = {
+    ...collectPreferences(),
+    ageGroup: els.uploadAgeGroupSelect.value,
+    genderPresentation: els.uploadGenderSelect.value
+  };
+
+  try {
+    const data = state.apiAvailable
+      ? await fetchJson(apiUrl("/api/analyze-image"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            imageDataUrl: state.uploadImageDataUrl,
+            preferences
+          })
+        })
+      : buildStaticUploadResult(preferences);
+
+    state.uploadedProfile = {
+      ...data.profile,
+      image: state.uploadImageDataUrl
+    };
+    state.selectedProfileId = "uploaded";
+    state.seedProductId = null;
+    state.recommendations = data.products;
+    state.source = data.source;
+    state.model = data.model || state.model;
+    renderProfiles();
+    renderSelectedProfile();
+    renderAssistant(data);
+    renderProducts();
+    renderSeedBanner(data.similarTo);
+    updateStatus(data.source === "image-openai" ? `Image AI ${data.model}` : "Image fallback");
+  } catch (error) {
+    console.error(error);
+    updateStatus("Analysis failed");
+  } finally {
+    els.analyzePhotoButton.disabled = false;
+    els.analyzePhotoButton.textContent = "Analyze photo";
   }
 }
 
@@ -273,7 +358,14 @@ function collectPreferences() {
 }
 
 function selectedProfile() {
+  if (state.selectedProfileId === "uploaded" && state.uploadedProfile) {
+    return state.uploadedProfile;
+  }
   return state.profiles.find((profile) => profile.id === state.selectedProfileId) ?? state.profiles[0];
+}
+
+function visibleProfiles() {
+  return state.uploadedProfile ? [state.uploadedProfile, ...state.profiles] : state.profiles;
 }
 
 async function fetchJson(url, options) {
@@ -286,6 +378,86 @@ async function fetchJson(url, options) {
 
 function apiUrl(path) {
   return `${API_BASE_URL}${path}`;
+}
+
+function stripProfileImage(profile) {
+  if (!profile) {
+    return null;
+  }
+  const { image, ...rest } = profile;
+  return rest;
+}
+
+function buildStaticUploadResult(preferences) {
+  const uploadedProfile = {
+    id: "uploaded",
+    name: "Uploaded Photo",
+    age: null,
+    ageGroup: preferences.ageGroup,
+    genderPresentation: preferences.genderPresentation,
+    bodyType: preferences.ageGroup === "kid" ? "kid" : "rectangle",
+    faceShape: "oval",
+    size: "From photo",
+    heightBand: preferences.ageGroup === "kid" ? "growing" : "unknown",
+    undertone: "neutral",
+    styleWords: preferences.styleMood === "street" ? ["streetwear", "comfortable", "layered"] : ["comfortable", "minimal", "easy-care"],
+    defaultOccasion: preferences.occasion,
+    defaultBudget: preferences.budget,
+    defaultPalette: preferences.colors?.length ? preferences.colors : ["black", "cream", "denim"],
+    mockAnalysis: {
+      shoulderBalance: "estimated",
+      waistDefinition: preferences.ageGroup === "kid" ? "not used" : "estimated",
+      verticalLine: "estimated",
+      faceCut: "not analyzed",
+      fitGoal: "use the uploaded photo with preference-based styling signals"
+    }
+  };
+  const result = window.CLIENT_RECOMMENDER.recommend({
+    profiles: [uploadedProfile, ...state.profiles],
+    products: state.products,
+    profileId: "uploaded",
+    preferences,
+    seedProductId: null
+  });
+
+  return {
+    ...result,
+    profile: uploadedProfile,
+    source: "image-fallback",
+    assistantNote: "OpenAI image analysis is not available in static mode, so these are preference-based matches.",
+    analysis: {
+      observations: ["Static mode cannot analyze image pixels."],
+      aiError: { code: "static-mode", message: "No backend API was available." }
+    }
+  };
+}
+
+function compressImageFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      reject(new Error("Unsupported image type"));
+      return;
+    }
+
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const maxSide = 900;
+      const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext("2d");
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.84));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Image could not be loaded"));
+    };
+    image.src = objectUrl;
+  });
 }
 
 function updateStatus(text) {

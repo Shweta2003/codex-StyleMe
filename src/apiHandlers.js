@@ -1,5 +1,6 @@
 import { demoProfiles } from "../data/demoProfiles.js";
 import { products } from "../data/products.js";
+import { analyzeImageToProfile } from "./imageStylistAnalysis.js";
 import { buildOpenAIRecommendations, getLastOpenAIError } from "./openaiStylistAgent.js";
 import { getSimilarProducts, recommendProducts } from "./recommendationEngine.js";
 
@@ -13,7 +14,7 @@ export function getBootstrapPayload() {
 }
 
 export async function getRecommendationsPayload(body = {}) {
-  const profile = demoProfiles.find((item) => item.id === body.profileId) ?? demoProfiles[0];
+  const profile = getRequestProfile(body);
   const preferences = normalizePreferences(body.preferences ?? {}, profile);
   const seedProductId = typeof body.seedProductId === "string" ? body.seedProductId : undefined;
 
@@ -62,9 +63,86 @@ export async function getRecommendationsPayload(body = {}) {
   };
 }
 
+export async function getImageAnalysisPayload(body = {}) {
+  const basePreferences = body.preferences ?? {};
+  const analysis = await analyzeImageToProfile({
+    imageDataUrl: body.imageDataUrl,
+    preferences: basePreferences
+  });
+  const profile = analysis.profile;
+  const preferences = normalizePreferences(basePreferences, profile);
+  const heuristic = recommendProducts({
+    products,
+    profile,
+    preferences,
+    limit: 9
+  });
+
+  return {
+    ...heuristic,
+    source: analysis.source,
+    model: analysis.source === "image-openai" ? process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || "gpt-5.5" : null,
+    profile,
+    preferences,
+    analysis: {
+      observations: analysis.observations,
+      aiError: analysis.aiError
+    },
+    assistantNote: buildImageNote(profile, analysis, heuristic),
+    styleDiagnosis: [
+      ...analysis.observations,
+      heuristic.guidance.bodyType.tips[0],
+      heuristic.guidance.faceShape.tips[0]
+    ].slice(0, 4),
+    outfitIdeas: buildLocalOutfits(heuristic.products),
+    avoid: [
+      "Treat image analysis as a styling estimate, not a measurement.",
+      "Use shopper-entered size and garment measurements before purchase."
+    ]
+  };
+}
+
 export function getSimilarPayload(seedProductId) {
   return {
     products: getSimilarProducts({ products, seedProductId, limit: 8 })
+  };
+}
+
+function getRequestProfile(body) {
+  if (body.customProfile?.id === "uploaded") {
+    return normalizeCustomProfile(body.customProfile);
+  }
+  return demoProfiles.find((item) => item.id === body.profileId) ?? demoProfiles[0];
+}
+
+function normalizeCustomProfile(profile) {
+  const fallback = demoProfiles[0];
+  return {
+    id: "uploaded",
+    name: "Uploaded Photo",
+    age: null,
+    ageGroup: safeChoice(profile.ageGroup, ["kid", "teen", "young-adult", "adult", "mature"], "adult"),
+    genderPresentation: safeChoice(profile.genderPresentation, ["women", "men", "all", "kids"], "all"),
+    bodyType: safeChoice(
+      profile.bodyType,
+      ["hourglass", "rectangle", "oval", "triangle", "inverted-triangle", "athletic", "petite", "tall", "kid"],
+      "rectangle"
+    ),
+    faceShape: safeChoice(profile.faceShape, ["oval", "round", "square", "heart", "diamond", "oblong"], "oval"),
+    size: "From photo",
+    heightBand: safeText(profile.heightBand, "unknown"),
+    undertone: safeText(profile.undertone, "neutral"),
+    styleWords: Array.isArray(profile.styleWords) && profile.styleWords.length ? profile.styleWords.slice(0, 4) : fallback.styleWords,
+    defaultOccasion: safeText(profile.defaultOccasion, "weekend"),
+    defaultBudget: Number(profile.defaultBudget) || 120,
+    defaultPalette: Array.isArray(profile.defaultPalette) && profile.defaultPalette.length ? profile.defaultPalette.slice(0, 4) : fallback.defaultPalette,
+    mockAnalysis: {
+      shoulderBalance: safeText(profile.mockAnalysis?.shoulderBalance, "estimated"),
+      waistDefinition: safeText(profile.mockAnalysis?.waistDefinition, "estimated"),
+      verticalLine: safeText(profile.mockAnalysis?.verticalLine, "estimated"),
+      faceCut: safeText(profile.mockAnalysis?.faceCut, "estimated"),
+      fitGoal: safeText(profile.mockAnalysis?.fitGoal, "use the uploaded photo for style-aware matching")
+    }
   };
 }
 
@@ -160,6 +238,17 @@ function buildLocalNote(profile, result) {
   return `For ${profile.name}, I would start with ${top.name} because it lines up with the selected body balance, face shape, occasion, and budget signals in the static catalog.`;
 }
 
+function buildImageNote(profile, analysis, result) {
+  const top = result.products[0];
+  const base = top
+    ? `I analyzed the uploaded photo for visible style cues and started with ${top.name}.`
+    : "I analyzed the uploaded photo but could not find a strong catalog match.";
+  if (analysis.source === "image-openai") {
+    return `${base} The match uses the estimated ${profile.bodyType} styling profile, ${profile.faceShape} face-shape cue, palette, occasion, and budget.`;
+  }
+  return `${base} OpenAI image analysis was unavailable, so these are preference-based fallback matches.`;
+}
+
 function buildLocalOutfits(recommendedProducts) {
   const top = recommendedProducts.slice(0, 6);
   const firstSet = top.filter((product) => ["top", "bottom", "jacket", "shoe", "accessory"].includes(product.category)).slice(0, 3);
@@ -181,6 +270,17 @@ function buildLocalOutfits(recommendedProducts) {
 
 function normalizeChoice(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
+}
+
+function safeChoice(value, allowed, fallback) {
+  return allowed.includes(value) ? value : fallback;
+}
+
+function safeText(value, fallback) {
+  if (typeof value !== "string" || !value.trim()) {
+    return fallback;
+  }
+  return value.trim().slice(0, 120);
 }
 
 function clampNumber(value, min, max, fallback) {
