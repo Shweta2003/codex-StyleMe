@@ -3,19 +3,22 @@ import { readFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import { demoProfiles } from "./data/demoProfiles.js";
-import { products } from "./data/products.js";
-import { buildOpenAIRecommendations, getLastOpenAIError } from "./src/openaiStylistAgent.js";
-import { getSimilarProducts, recommendProducts } from "./src/recommendationEngine.js";
+import {
+  applyCors,
+  getBootstrapPayload,
+  getRecommendationsPayload,
+  getSimilarPayload,
+  handleOptions,
+  methodNotAllowed,
+  readJson,
+  sendJson
+} from "./src/apiHandlers.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 loadDotEnv(join(__dirname, ".env"));
 
 const PORT = Number(process.env.PORT || 5173);
 const publicDir = join(__dirname, "public");
-const allowedOrigins = parseAllowedOrigins(
-  process.env.ALLOWED_ORIGINS || process.env.ALLOWED_ORIGIN || ""
-);
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -30,40 +33,32 @@ const mimeTypes = {
 
 const server = http.createServer(async (req, res) => {
   try {
-    applyCors(req, res);
-    if (req.method === "OPTIONS") {
-      res.writeHead(204);
-      return res.end();
+    if (handleOptions(req, res)) {
+      return;
     }
+    applyCors(req, res);
 
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     if (req.method === "GET" && url.pathname === "/api/bootstrap") {
-      return sendJson(res, {
-        profiles: demoProfiles,
-        products,
-        hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY),
-        model: process.env.OPENAI_MODEL || "gpt-5.5"
-      });
+      return sendJson(res, getBootstrapPayload());
     }
 
     if (req.method === "POST" && url.pathname === "/api/recommendations") {
       const body = await readJson(req);
-      return sendJson(res, await handleRecommendations(body));
+      return sendJson(res, await getRecommendationsPayload(body));
     }
 
     if (req.method === "GET" && url.pathname === "/api/similar") {
       const seedProductId = url.searchParams.get("seedProductId");
-      return sendJson(res, {
-        products: getSimilarProducts({ products, seedProductId, limit: 8 })
-      });
+      return sendJson(res, getSimilarPayload(seedProductId));
     }
 
     if (req.method === "GET") {
       return serveStatic(url.pathname, res);
     }
 
-    sendJson(res, { error: "Method not allowed" }, 405);
+    methodNotAllowed(res);
   } catch (error) {
     console.error(error);
     sendJson(res, { error: "Unexpected server error" }, 500);
@@ -73,106 +68,6 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`AI Fit Stylist running at http://localhost:${PORT}`);
 });
-
-async function handleRecommendations(body) {
-  const profile = demoProfiles.find((item) => item.id === body.profileId) ?? demoProfiles[0];
-  const preferences = normalizePreferences(body.preferences ?? {}, profile);
-  const seedProductId = typeof body.seedProductId === "string" ? body.seedProductId : undefined;
-
-  const heuristic = recommendProducts({
-    products,
-    profile,
-    preferences,
-    seedProductId,
-    limit: 9
-  });
-
-  const ai = await buildOpenAIRecommendations({
-    profile,
-    preferences,
-    products,
-    seedProductId,
-    heuristic
-  });
-
-  if (ai) {
-    return {
-      ...ai,
-      source: "openai-agent",
-      model: process.env.OPENAI_MODEL || "gpt-5.5",
-      preferences
-    };
-  }
-
-  return {
-    ...heuristic,
-    source: "heuristic",
-    model: null,
-    preferences,
-    aiError: process.env.OPENAI_API_KEY ? getLastOpenAIError() : null,
-    assistantNote: buildLocalNote(profile, heuristic),
-    styleDiagnosis: [
-      heuristic.guidance.bodyType.tips[0],
-      heuristic.guidance.faceShape.tips[0],
-      heuristic.guidance.age
-    ],
-    outfitIdeas: buildLocalOutfits(heuristic.products),
-    avoid: [
-      "Avoid choosing size only from the label; compare garment measurements when available.",
-      "Avoid over-indexing on body type; occasion, comfort, and personal taste should still lead."
-    ]
-  };
-}
-
-function normalizePreferences(preferences, profile) {
-  return {
-    occasion: normalizeChoice(preferences.occasion, ["work", "weekend", "date", "event", "campus", "travel", "school", "play", "family"], profile.defaultOccasion),
-    styleMood: normalizeChoice(preferences.styleMood, ["classic", "street", "work", "comfort", "bold"], "classic"),
-    fit: normalizeChoice(preferences.fit, ["balanced", "structured", "relaxed"], "balanced"),
-    budget: clampNumber(preferences.budget, 30, 250, profile.defaultBudget),
-    colors: Array.isArray(preferences.colors) ? preferences.colors.slice(0, 5) : profile.defaultPalette,
-    notes: typeof preferences.notes === "string" ? preferences.notes.slice(0, 500) : ""
-  };
-}
-
-function buildLocalNote(profile, result) {
-  const top = result.products[0];
-  if (!top) {
-    return `I could not find a confident match for ${profile.name} in the demo catalog.`;
-  }
-  return `For ${profile.name}, I would start with ${top.name} because it lines up with the selected body balance, face shape, occasion, and budget signals in the static catalog.`;
-}
-
-function buildLocalOutfits(recommendedProducts) {
-  const top = recommendedProducts.slice(0, 6);
-  const firstSet = top.filter((product) => ["top", "bottom", "jacket", "shoe", "accessory"].includes(product.category)).slice(0, 3);
-  const secondSet = top.filter((product) => product.category !== "accessory").slice(1, 4);
-
-  return [
-    {
-      title: "Balanced daily set",
-      productIds: firstSet.map((product) => product.id),
-      reason: "Uses the highest scoring pieces to create a practical outfit from the static catalog."
-    },
-    {
-      title: "Alternate styling path",
-      productIds: secondSet.map((product) => product.id),
-      reason: "Keeps the same fit logic while changing the silhouette and mood."
-    }
-  ].filter((outfit) => outfit.productIds.length);
-}
-
-function normalizeChoice(value, allowed, fallback) {
-  return allowed.includes(value) ? value : fallback;
-}
-
-function clampNumber(value, min, max, fallback) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) {
-    return fallback;
-  }
-  return Math.min(max, Math.max(min, number));
-}
 
 async function serveStatic(pathname, res) {
   const requestedPath = pathname === "/" ? "/index.html" : pathname;
@@ -193,55 +88,6 @@ async function serveStatic(pathname, res) {
   } catch {
     sendJson(res, { error: "Not found" }, 404);
   }
-}
-
-function sendJson(res, data, status = 200) {
-  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
-  res.end(JSON.stringify(data));
-}
-
-function applyCors(req, res) {
-  const origin = req.headers.origin;
-  if (!origin) {
-    return;
-  }
-
-  const allowAny = allowedOrigins.includes("*");
-  if (!allowAny && !allowedOrigins.includes(origin)) {
-    return;
-  }
-
-  res.setHeader("Access-Control-Allow-Origin", allowAny ? "*" : origin);
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Vary", "Origin");
-}
-
-function parseAllowedOrigins(value) {
-  return value
-    .split(",")
-    .map((origin) => origin.trim().replace(/\/$/, ""))
-    .filter(Boolean);
-}
-
-function readJson(req) {
-  return new Promise((resolve, reject) => {
-    let raw = "";
-    req.on("data", (chunk) => {
-      raw += chunk;
-      if (raw.length > 1_000_000) {
-        req.destroy(new Error("Request too large"));
-      }
-    });
-    req.on("end", () => {
-      try {
-        resolve(raw ? JSON.parse(raw) : {});
-      } catch (error) {
-        reject(error);
-      }
-    });
-    req.on("error", reject);
-  });
 }
 
 function loadDotEnv(filePath) {

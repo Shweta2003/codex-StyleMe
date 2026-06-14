@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="StyleMe icon">
+  <rect width="64" height="64" rx="14" fill="#0f766e"/>
+  <path d="M32 15c0-4 3-7 7-7 3 0 6 2 7 5" fill="none" stroke="#f7f2e8" stroke-width="4" stroke-linecap="round"/>
+  <path d="M32 23 14 35c-2 1-1 5 2 5h32c3 0 4-4 2-5L32 23Z" fill="none" stroke="#f7f2e8" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M43 13 45 8l2 5 5 2-5 2-2 5-2-5-5-2 5-2Z" fill="#f2b84b"/>
+  <path d="M23 50c4 3 14 3 18 0" fill="none" stroke="#f2b84b" stroke-width="4" stroke-linecap="round"/>
+</svg>

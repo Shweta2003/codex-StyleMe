@@ -10,6 +10,7 @@
     "export-data": "node scripts/export-public-data.js",
     "export-config": "node scripts/export-public-config.js",
     "smoke": "node scripts/smoke-server.js",
+    "smoke:vercel": "node scripts/smoke-vercel-api.js",
     "test": "node --test src/recommendationEngine.test.js"
   },
   "dependencies": {

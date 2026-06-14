@@ -73,4 +73,30 @@ Build the static client:
 npm run build:client
 ```
 
-Deploy the `public` folder to Netlify or Vercel. Deploy the full project to a Node host for the backend.
+Deploy the `public` folder to Netlify or Vercel. For Vercel backend hosting, deploy the full project and use the `api/` serverless functions instead of `server.js`.
+
+Vercel backend settings:
+
+```text
+Framework Preset: Other
+Root Directory: ./
+Install Command: npm install
+Build Command: leave empty
+Output Directory: leave empty / N/A
+```
+
+Vercel backend environment:
+
+```env
+OPENAI_API_KEY=sk-your-key-here
+OPENAI_MODEL=gpt-5.5
+ALLOWED_ORIGIN=https://your-client-site.netlify.app
+```
+
+After deployment, your backend URLs are:
+
+```text
+https://your-vercel-backend.vercel.app/api/bootstrap
+https://your-vercel-backend.vercel.app/api/recommendations
+https://your-vercel-backend.vercel.app/api/similar
+```

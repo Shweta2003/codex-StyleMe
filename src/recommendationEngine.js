@@ -175,7 +175,7 @@ export function recommendProducts({
       ...compactProduct(item.product),
       score: item.score,
       reasons: item.reasons.slice(0, 4),
-      badges: item.badges.slice(0, 3)
+      badges: displayBadges(item.badges).slice(0, 4)
     }))
   };
 }
@@ -221,7 +221,7 @@ export function compactProduct(product) {
 
 function scoreProduct(product, profile, preferences, guidance, seed) {
   const reasons = [];
-  const badges = [];
+  const badges = [product.category];
   let score = 4;
 
   if (product.gender.includes(profile.genderPresentation) || product.gender.includes("all")) {
@@ -233,19 +233,21 @@ function scoreProduct(product, profile, preferences, guidance, seed) {
 
   if (product.ageGroups.includes(profile.ageGroup)) {
     score += 4;
-    badges.push("age-fit");
+    badges.push(profile.ageGroup === "kid" ? "kids" : "age fit");
   }
 
   if (product.bodyTypes.includes(profile.bodyType)) {
     score += 10;
     reasons.push(`Works well for ${guidance.bodyType.label.toLowerCase()}.`);
-    badges.push("body match");
+    badges.push(profile.bodyType === "kid" ? "comfort fit" : "body match");
   }
 
   if (product.faceShapes.includes(profile.faceShape)) {
     score += 7;
     reasons.push(`Complements a ${guidance.faceShape.label.toLowerCase()}.`);
-    badges.push("face match");
+    if (profile.ageGroup !== "kid") {
+      badges.push("face match");
+    }
   }
 
   const favoredBodyCuts = overlap(product.cuts, guidance.bodyType.favoredCuts);
@@ -268,27 +270,30 @@ function scoreProduct(product, profile, preferences, guidance, seed) {
   }
 
   const desiredStyles = getDesiredStyles(profile, preferences);
-  const styleMatches = overlap(product.styles, desiredStyles);
-  if (styleMatches) {
-    score += styleMatches * 4;
+  const styleMatches = intersection(product.styles, desiredStyles);
+  if (styleMatches.length) {
+    score += styleMatches.length * 4;
     reasons.push("Matches the preferred style direction.");
+    badges.push(styleMatches[0]);
   }
 
   const desiredColors = normalizeList(preferences.colors?.length ? preferences.colors : profile.defaultPalette);
-  const colorMatches = overlap(product.colors, desiredColors);
-  if (colorMatches) {
-    score += colorMatches * 2;
-    badges.push("palette");
+  const colorMatches = intersection(product.colors, desiredColors);
+  if (colorMatches.length) {
+    score += colorMatches.length * 2;
+    badges.push(`${colorMatches[0]} palette`);
   }
 
   const fit = preferences.fit;
   if (fit === "structured" && product.cuts.some((cut) => ["structured", "tailored", "tapered"].includes(cut))) {
     score += 5;
     reasons.push("Leans structured for a sharper fit.");
+    badges.push("structured");
   }
   if (fit === "relaxed" && product.cuts.some((cut) => ["relaxed", "fluid", "open-front"].includes(cut))) {
     score += 5;
     reasons.push("Keeps the outfit relaxed and comfortable.");
+    badges.push("relaxed");
   }
 
   const budget = Number(preferences.budget ?? profile.defaultBudget ?? 120);
@@ -312,7 +317,9 @@ function scoreProduct(product, profile, preferences, guidance, seed) {
     if (similarity > 0) {
       score += similarity;
       reasons.push(`Similar to ${seed.name}.`);
-      badges.push("similar");
+      if (similarity >= 5) {
+        badges.push("similar pick");
+      }
     }
   }
 
@@ -338,8 +345,47 @@ function overlap(a = [], b = []) {
   return normalizeList(a).filter((item) => bSet.has(item)).length;
 }
 
+function intersection(a = [], b = []) {
+  const bSet = new Set(normalizeList(b));
+  return normalizeList(a).filter((item) => bSet.has(item));
+}
+
 function normalizeList(items = []) {
   return items.map((item) => String(item).trim().toLowerCase()).filter(Boolean);
+}
+
+function displayBadges(badges = []) {
+  return [...new Set(badges)]
+    .filter(Boolean)
+    .sort((a, b) => badgePriority(a) - badgePriority(b));
+}
+
+function badgePriority(badge) {
+  const value = String(badge).toLowerCase();
+  const categoryBadges = new Set(["dress", "jacket", "bottom", "top", "accessory", "set", "shoe"]);
+  const occasionBadges = new Set(["work", "weekend", "date", "event", "campus", "travel", "school", "play", "family"]);
+  const styleBadges = new Set([
+    "polished",
+    "minimal",
+    "elegant",
+    "streetwear",
+    "playful",
+    "comfortable",
+    "utility",
+    "smart casual",
+    "structured",
+    "easy-care"
+  ]);
+
+  if (categoryBadges.has(value)) return 0;
+  if (occasionBadges.has(value)) return 1;
+  if (styleBadges.has(value)) return 2;
+  if (value.includes("palette")) return 3;
+  if (["structured", "relaxed", "comfort fit", "kids"].includes(value)) return 4;
+  if (value === "in budget") return 5;
+  if (value.includes("match") || value === "age fit") return 6;
+  if (value.includes("similar")) return 7;
+  return 8;
 }
 
 function summarizeProfile(profile) {
